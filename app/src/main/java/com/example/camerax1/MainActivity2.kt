@@ -1,6 +1,7 @@
 package com.example.camerax1
 
 import android.Manifest
+import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -58,6 +59,7 @@ class MainActivity2 : AppCompatActivity() {
     private lateinit var galleryLauncher: ActivityResultLauncher<String>
     private lateinit var inputImage: InputImage
     private lateinit var barcodeScanner: BarcodeScanner
+    private lateinit var scanLineView:ScanLineView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,6 +70,8 @@ class MainActivity2 : AppCompatActivity() {
         tvResult = findViewById(R.id.tvResult)
         SelectGallery = findViewById(R.id.gallery)
         ViewFinder1 = findViewById(R.id.ViewFinder1)
+        scanLineView = findViewById(R.id.scanLineView)
+        scanLineView.attachToPreview(ViewFinder1)
 
         barcodeScanner = BarcodeScanning.getClient()
         outputDirectory = getOutputDirectory()
@@ -118,17 +122,13 @@ class MainActivity2 : AppCompatActivity() {
     }
 
     private fun openCamera(){
+        scanCamera()
         cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener(Runnable {
-            // Get the ProcessCameraProvider
             val cameraProvider = cameraProviderFuture.get()
-
-            // Set up the preview use case
             val preview = Preview.Builder().build().also {
                 it.setSurfaceProvider(ViewFinder1.surfaceProvider)
             }
-
-            // Set up the image analysis use case
             imageAnalyzer = ImageAnalysis.Builder()
                 .build()
                 .also {
@@ -136,12 +136,8 @@ class MainActivity2 : AppCompatActivity() {
                         processFrameForBarcode(imageProxy)
                     }
                 }
-
             try {
-                // Unbind any existing use cases before binding new use cases
                 cameraProvider.unbindAll()
-
-                // Bind the preview and image analysis use cases to the camera
                 cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageAnalyzer)
             } catch (exception: Exception) {
                 Log.e(TAG, "Error binding camera use cases: ${exception.message}")
@@ -218,6 +214,64 @@ class MainActivity2 : AppCompatActivity() {
         processQr()
     }
 
+    private fun processImageUri(uri: Uri) {
+        try {
+            val imageBitmap = MediaStore.Images.Media.getBitmap(this.contentResolver, uri)
+            processImageBitmap(imageBitmap)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error processing image from gallery: ${e.message}")
+            Toast.makeText(this, "Error processing image from gallery", Toast.LENGTH_SHORT).show()
+        }
+    }
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == Constants.REQUEST_CODE_PERMISSIONS && resultCode == Activity.RESULT_OK) {
+            data?.data?.let { uri ->
+                processImageUri(uri)
+            }
+        }
+    }
+//    private fun processQr() {
+//        barcodeScanner.process(inputImage)
+//            .addOnSuccessListener { barcodes ->
+//                for (barcode in barcodes) {
+//                    val data = barcode.displayValue
+//                    tvResult.text = "Data: $data"
+//                    if (URLUtil.isValidUrl(data)) {
+//                        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(data))
+//                        startActivity(browserIntent)
+//                    } else {
+//                        val file = File(data)
+//                        if (file.exists()) {
+//                            tvResult.setOnClickListener {
+//                                val uri = FileProvider.getUriForFile(
+//                                    this,
+//                                    applicationContext.packageName + ".provider",
+//                                    file
+//                                )
+//                                val intent = Intent(Intent.ACTION_VIEW)
+//                                intent.setDataAndType(uri, getMimeType(file))
+//                                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+//                                try {
+//                                    startActivity(intent)
+//                                } catch (e: ActivityNotFoundException) {
+//                                    Log.e(TAG, "Activity not found to open file: ${e.message}")
+//                                    Toast.makeText(
+//                                        this,
+//                                        "No application found to open file",
+//                                        Toast.LENGTH_SHORT
+//                                    ).show()
+//                                }
+//                            }
+//                        } else {
+//                            Log.e(TAG, "File not found: $data")
+//                            Toast.makeText(this, "File not found", Toast.LENGTH_SHORT).show()
+//                        }
+//                    }
+//                }
+//            }
+//    }
+
     private fun processQr() {
         barcodeScanner.process(inputImage)
             .addOnSuccessListener { barcodes ->
@@ -228,34 +282,12 @@ class MainActivity2 : AppCompatActivity() {
                         val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(data))
                         startActivity(browserIntent)
                     } else {
-                        val file = File(data)
-                        if (file.exists()) {
-                            tvResult.setOnClickListener {
-                                val uri = FileProvider.getUriForFile(
-                                    this,
-                                    applicationContext.packageName + ".provider",
-                                    file
-                                )
-                                val intent = Intent(Intent.ACTION_VIEW)
-                                intent.setDataAndType(uri, getMimeType(file))
-                                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                try {
-                                    startActivity(intent)
-                                } catch (e: ActivityNotFoundException) {
-                                    Log.e(TAG, "Activity not found to open file: ${e.message}")
-                                    Toast.makeText(
-                                        this,
-                                        "No application found to open file",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            }
-                        } else {
-                            Log.e(TAG, "File not found: $data")
-                            Toast.makeText(this, "File not found", Toast.LENGTH_SHORT).show()
-                        }
+                        // Handle non-URL data if needed
                     }
                 }
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "Barcode scanning failed: ${e.message}", e)
             }
     }
     private fun getMimeType(file: File): String {

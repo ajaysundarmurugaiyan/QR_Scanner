@@ -4,4 +4,5 @@
     <color name="white">#FFFFFFFF</color>
     <color name="blue">#0330fc</color>
     <color name="purple">#d06fe8</color>
+    <color name="scan_line_color">#FF0000</color>
 </resources>
